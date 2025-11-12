@@ -9,7 +9,7 @@ def compilar_codigo():
     """Obtiene el código de la entrada y muestra una simulación de salida."""
     codigo = entrada_texto.get("1.0", tk.END)  # '1.0' es la primera línea, primer caracter; tk.END es el final
 
-    # Simulación de Compilación/Ejecución
+    
     salida = f"Código recibido para compilar:\n---\n{codigo.strip()}\n---\n\n"
 
     # Aquí es donde pondremos la lógica de tu compilador más adelante.
