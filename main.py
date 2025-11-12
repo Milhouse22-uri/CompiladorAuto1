@@ -2,7 +2,9 @@ import tkinter as tk
 from tkinter import scrolledtext
 from tkinter import messagebox
 
-# --- Función Placeholder del Compilador (la iremos mejorando) ---
+
+
+
 def compilar_codigo():
     """Obtiene el código de la entrada y muestra una simulación de salida."""
     codigo = entrada_texto.get("1.0", tk.END)  # '1.0' es la primera línea, primer caracter; tk.END es el final
