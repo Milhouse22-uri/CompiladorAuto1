@@ -86,10 +86,38 @@ def compilar_codigo():
     salida_texto.insert(tk.END, salida)
     salida_texto.config(state=tk.DISABLED)
 
+def compilar_codigo():
+    codigo = entrada_texto.get("1.0", tk.END).strip()
+    if not codigo: return
+
+    # PASO 1: LÉXICO
+    tokens, errores_lexicos = lexer(codigo)
+    
+    salida = "1️ FASE LÉXICA:\n"
+    if errores_lexicos:
+        salida += "\n".join(errores_lexicos)
+        mostrar_salida(salida)
+        return
+    else:
+        salida += f"Tokens generados: {len(tokens)}\n"
+        for t in tokens: salida += f"[{t[0]}: {t[1]}] "
+        salida += "\n\n"
+
+    # PASO 2: SINTÁCTICO
+    salida += "2️ FASE SINTÁCTICA:\n"
+    parser = Parser(tokens)
+    exito, mensaje_parser = parser.parsear()
+    
+    salida += mensaje_parser
+
+    if exito:
+        salida += "\n\n RESULTADO: ¡El código es válido y compila!"
+    
+    mostrar_salida(salida)
 
 # --- CONFIGURACIÓN DE LA VENTANA (IGUAL A TU CÓDIGO) ---
 ventana = tk.Tk()
-ventana.title("Mi Primer Compilador - Fase Léxica 🧠")
+ventana.title("Mi Primer Compilador - Fase Léxica")
 ventana.geometry("700x650")
 
 tk.Label(ventana, text="Código Fuente (Español):", font=("Arial", 12, "bold")).pack(pady=5)
@@ -100,7 +128,7 @@ entrada_texto.pack(pady=5, padx=10)
 # Código de prueba por defecto en español
 entrada_texto.insert(tk.END, 'entero edad = 25;\nimprimir "Hola Mundo";\nimprimir "Este es mi compilador";')
 
-boton_compilar = tk.Button(ventana, text="➡️ COMPILAR", command=compilar_codigo,
+boton_compilar = tk.Button(ventana, text="COMPILAR", command=compilar_codigo,
                            bg="#4CAF50", fg="white", font=("Arial", 14, "bold"))
 boton_compilar.pack(pady=15)
 
