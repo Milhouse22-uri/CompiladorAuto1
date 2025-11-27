@@ -1,141 +1,213 @@
 import tkinter as tk
 from tkinter import scrolledtext
-from tkinter import messagebox
-import re  # Importamos expresiones regulares para el análisis léxico
+import re
 
-# --- DEFINICIÓN DE TOKENS (NUESTRO DICCIONARIO) ---
+# --- Definicion de tokens ---
 TOKENS_REGEX = [
-    ('RESERVADA', r'\b(imprimir|entero|decimal|si|sino|mientras)\b'),  # Palabras clave
-    ('NUMERO', r'\b\d+\b'),  # Números enteros
-    ('IDENTIFICADOR', r'\b[a-zA-Z_]\w*\b'),  # Nombres de variables
-    ('CADENA', r'"[^"]*"'),  # Textos entre comillas
-    ('ASIGNACION', r'='),  # Signo igual
-    ('OPERADOR', r'[+\-*/]'),  # Operadores matemáticos
-    ('SEPARADOR', r'[();{}]'),  # Signos de puntuación
-    ('ESPACIO', r'\s+'),  # Espacios (los ignoraremos)
-    ('DESCONOCIDO', r'.'),  # Cualquier otra cosa (Error)
+    ("RESERVADA", r"\b(imprimir|entero|decimal|si|sino|mientras)\b"),
+    ("NUMERO", r"\b\d+\b"),
+    ("IDENTIFICADOR", r"\b[a-zA-Z_]\w*\b"),
+    ("CADENA", r"\"[^\"]*\""),
+    ("ASIGNACION", r"="),
+    ("OPERADOR", r"[+\-*/]"),
+    ("SEPARADOR", r"[();{}]"),
+    ("ESPACIO", r"\s+"),
+    ("DESCONOCIDO", r"."),
 ]
 
 
-def lexer(codigo_fuente):
-    """
-    Analiza el código y lo convierte en una lista de tokens.
-    Retorna: Lista de tuplas (TIPO, VALOR) y lista de errores.
-    """
+def lexer(codigo_fuente: str):
+    """Analiza el codigo y lo convierte en una lista de tokens y posibles errores lexicos."""
     tokens_encontrados = []
     errores = []
     linea_actual = 1
 
-    # Unimos todos los patrones de regex en uno solo
-    regex_general = '|'.join(f'(?P<{nombre}>{patron})' for nombre, patron in TOKENS_REGEX)
+    regex_general = "|".join(f"(?P<{nombre}>{patron})" for nombre, patron in TOKENS_REGEX)
 
     for match in re.finditer(regex_general, codigo_fuente):
         tipo = match.lastgroup
         valor = match.group()
 
-        if tipo == 'ESPACIO':
-            # Contamos líneas nuevas para reportar errores correctamente
-            linea_actual += valor.count('\n')
+        if tipo == "ESPACIO":
+            linea_actual += valor.count("\n")
             continue
-        elif tipo == 'DESCONOCIDO':
-            errores.append(f"Error Léxico: Carácter inesperado '{valor}' en línea {linea_actual}")
+
+        if tipo == "DESCONOCIDO":
+            errores.append(f"Error Lexico: Caracter inesperado '{valor}' en linea {linea_actual}")
         else:
             tokens_encontrados.append((tipo, valor))
 
     return tokens_encontrados, errores
 
 
-def compilar_codigo():
-    """Función principal que coordina las fases del compilador."""
-    codigo = entrada_texto.get("1.0", tk.END).strip()
+class Parser:
+    """Analizador sintactico muy sencillo para validar declaraciones y llamadas a imprimir."""
 
-    # 1. FASE DE ANÁLISIS LÉXICO
-    tokens, errores = lexer(codigo)
+    def __init__(self, tokens):
+        self.tokens = tokens
+        self.pos = 0
+        self.log = []
 
-    salida = f"--- RESULTADO DEL ANÁLISIS LÉXICO ---\n"
+    def _actual(self):
+        if self.pos < len(self.tokens):
+            return self.tokens[self.pos]
+        return None, None
 
-    if errores:
-        salida += "\n🛑 ERRORES ENCONTRADOS:\n" + "\n".join(errores)
-    else:
-        salida += "✅ Análisis Léxico Exitoso. Tokens generados:\n"
-        for token in tokens:
-            # Formato: [TIPO: valor]
-            salida += f"[{token[0]}: {token[1]}] "
-            if token[1] == ';': salida += "\n"  # Salto de línea visual tras punto y coma
+    def _consumir(self, esperado_tipo=None, esperado_valor=None):
+        tipo, valor = self._actual()
+        if tipo is None:
+            return False, "Fin de archivo inesperado."
 
-        # Aquí iría la FASE 2: ANÁLISIS SINTÁCTICO (Parser)
-        # Por ahora, simularemos la ejecución simple de 'imprimir'
-        salida += "\n\n--- SIMULACIÓN DE EJECUCIÓN ---\n"
-        buffer_salida = ""
-        for i, (tipo, valor) in enumerate(tokens):
-            # Lógica muy simple: Si encuentro 'imprimir' y luego una cadena, la muestro
-            if valor == 'imprimir' and i + 1 < len(tokens):
-                siguiente_tipo, siguiente_valor = tokens[i + 1]
-                if siguiente_tipo == 'CADENA':
-                    # Quitamos las comillas para imprimir limpio
-                    buffer_salida += siguiente_valor.strip('"') + "\n"
+        if esperado_tipo and tipo != esperado_tipo:
+            return False, f"Se esperaba {esperado_tipo} pero se encontro {tipo} ('{valor}')."
 
-        if buffer_salida:
-            salida += ">> " + buffer_salida
-        else:
-            salida += "(El programa es válido léxicamente, pero no tiene instrucciones de salida ejecutables por esta versión simple)"
+        if esperado_valor and valor != esperado_valor:
+            return False, f"Se esperaba '{esperado_valor}' pero se encontro '{valor}'."
 
-    # Limpia y actualiza el área de salida
+        self.pos += 1
+        return True, ""
+
+    def _consumir_valor(self):
+        tipo, valor = self._actual()
+        if tipo is None:
+            return False, "Se esperaba un valor y se encontro el fin del archivo."
+
+        if tipo not in ("NUMERO", "CADENA", "IDENTIFICADOR"):
+            return False, f"Se esperaba un valor y se encontro '{valor}'."
+
+        self.pos += 1
+        return True, ""
+
+    def _parse_declaracion(self):
+        # tipo
+        self.pos += 1  # consumir palabra reservada (entero|decimal)
+
+        ok, msg = self._consumir("IDENTIFICADOR")
+        if not ok:
+            return False, msg
+
+        ok, msg = self._consumir("ASIGNACION", "=")
+        if not ok:
+            return False, msg
+
+        ok, msg = self._consumir_valor()
+        if not ok:
+            return False, msg
+
+        ok, msg = self._consumir("SEPARADOR", ";")
+        if not ok:
+            return False, "Falta ';' al final de la declaracion."
+
+        return True, "Declaracion valida."
+
+    def _parse_imprimir(self):
+        self.pos += 1  # consumir 'imprimir'
+
+        ok, msg = self._consumir_valor()
+        if not ok:
+            return False, "Se esperaba una expresion despues de 'imprimir'."
+
+        ok, msg = self._consumir("SEPARADOR", ";")
+        if not ok:
+            return False, "Falta ';' despues de la instruccion imprimir."
+
+        return True, "Impresion valida."
+
+    def parsear(self):
+        while self.pos < len(self.tokens):
+            tipo, valor = self._actual()
+
+            if valor in ("entero", "decimal"):
+                ok, msg = self._parse_declaracion()
+            elif valor == "imprimir":
+                ok, msg = self._parse_imprimir()
+            else:
+                return False, f"Error sintactico cerca de '{valor}'."
+
+            if not ok:
+                return False, msg
+
+            self.log.append(msg)
+
+        if self.log:
+            return True, "Sintaxis valida.\n" + "\n".join(self.log)
+        return True, "Sintaxis valida."
+
+
+def mostrar_salida(texto):
     salida_texto.config(state=tk.NORMAL)
     salida_texto.delete("1.0", tk.END)
-    salida_texto.insert(tk.END, salida)
+    salida_texto.insert(tk.END, texto)
     salida_texto.config(state=tk.DISABLED)
+
 
 def compilar_codigo():
     codigo = entrada_texto.get("1.0", tk.END).strip()
-    if not codigo: return
+    if not codigo:
+        mostrar_salida("No hay codigo para compilar.")
+        return
 
-    # PASO 1: LÉXICO
     tokens, errores_lexicos = lexer(codigo)
-    
-    salida = "1️ FASE LÉXICA:\n"
+
+    salida = "--- FASE LEXICA ---\n"
     if errores_lexicos:
         salida += "\n".join(errores_lexicos)
         mostrar_salida(salida)
         return
-    else:
-        salida += f"Tokens generados: {len(tokens)}\n"
-        for t in tokens: salida += f"[{t[0]}: {t[1]}] "
-        salida += "\n\n"
 
-    # PASO 2: SINTÁCTICO
-    salida += "2️ FASE SINTÁCTICA:\n"
+    salida += f"Tokens generados: {len(tokens)}\n"
+    salida += " ".join(f"[{t[0]}: {t[1]}]" for t in tokens)
+    salida += "\n\n--- FASE SINTACTICA ---\n"
+
     parser = Parser(tokens)
     exito, mensaje_parser = parser.parsear()
-    
     salida += mensaje_parser
 
     if exito:
-        salida += "\n\n RESULTADO: ¡El código es válido y compila!"
-    
+        salida += "\n\nResultado: el codigo es valido."
+
     mostrar_salida(salida)
 
-# --- CONFIGURACIÓN DE LA VENTANA (IGUAL A TU CÓDIGO) ---
+
+# --- Configuracion de la ventana ---
 ventana = tk.Tk()
-ventana.title("Mi Primer Compilador - Fase Léxica")
+ventana.title("Mi Primer Compilador - Fase Lexica y Sintactica")
 ventana.geometry("700x650")
 
-tk.Label(ventana, text="Código Fuente (Español):", font=("Arial", 12, "bold")).pack(pady=5)
+tk.Label(ventana, text="Codigo Fuente (Espanol):", font=("Arial", 12, "bold")).pack(pady=5)
 
-entrada_texto = scrolledtext.ScrolledText(ventana, width=80, height=18, wrap=tk.WORD,
-                                          font=("Consolas", 10), relief=tk.SUNKEN)
+entrada_texto = scrolledtext.ScrolledText(
+    ventana,
+    width=80,
+    height=18,
+    wrap=tk.WORD,
+    font=("Consolas", 10),
+    relief=tk.SUNKEN,
+)
 entrada_texto.pack(pady=5, padx=10)
-# Código de prueba por defecto en español
 entrada_texto.insert(tk.END, 'entero edad = 25;\nimprimir "Hola Mundo";\nimprimir "Este es mi compilador";')
 
-boton_compilar = tk.Button(ventana, text="COMPILAR", command=compilar_codigo,
-                           bg="#4CAF50", fg="white", font=("Arial", 14, "bold"))
+boton_compilar = tk.Button(
+    ventana,
+    text="COMPILAR",
+    command=compilar_codigo,
+    bg="#4CAF50",
+    fg="white",
+    font=("Arial", 14, "bold"),
+)
 boton_compilar.pack(pady=15)
 
 tk.Label(ventana, text="Consola / Tokens:", font=("Arial", 12, "bold")).pack(pady=5)
 
-salida_texto = scrolledtext.ScrolledText(ventana, width=80, height=10, wrap=tk.WORD,
-                                         font=("Consolas", 10), bg="#2c3e50", fg="#ecf0f1")
+salida_texto = scrolledtext.ScrolledText(
+    ventana,
+    width=80,
+    height=10,
+    wrap=tk.WORD,
+    font=("Consolas", 10),
+    bg="#2c3e50",
+    fg="#ecf0f1",
+)
 salida_texto.pack(pady=5, padx=10)
 salida_texto.config(state=tk.DISABLED)
 
